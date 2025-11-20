@@ -1,0 +1,3 @@
+pip install supabase
+pip install python-dotenv
+pip freeze > requirements.txt
