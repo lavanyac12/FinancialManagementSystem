@@ -4,7 +4,7 @@ from fastapi import HTTPException
 from datetime import datetime
 
 MAX_FILE_SIZE_MB = 10
-REQUIRED_COLUMNS = ["Date", "Description", "Amount", "Transaction Type"]
+REQUIRED_COLUMNS = ["Date", "Description", "Amount", "Type of Transaction"]
 
 class StatementParser:
     """
@@ -84,7 +84,7 @@ class StatementParser:
                 )
 
             description = str(row["Description"]).strip()
-            tx_type = str(row["Transaction Type"]).strip()
+            tx_type = str(row["Type of Transaction"]).strip()
 
             transactions.append({
                 "date": date_value,
