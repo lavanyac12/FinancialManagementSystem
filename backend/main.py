@@ -32,12 +32,12 @@ else:
 if model_path_resolved.exists():
     try:
         category_model = joblib.load(str(model_path_resolved))
-        print(f"✓ Loaded category model from {model_path_resolved}")
+        print(f"Loaded category model from {model_path_resolved}")
     except Exception as e:
-        print(f"❌ Failed to load category model: {e}")
+        print(f"Failed to load category model: {e}")
         category_model = None
 else:
-    print(f"⚠️  Category model not found at {model_path_resolved}. Skipping categorization until a model is available.")
+    print(f"Category model not found at {model_path_resolved}. Skipping categorization until a model is available.")
 
 
 # New insert logic using Supabase Python client in batch mode
@@ -70,7 +70,7 @@ def insert_transactions_supabase(transactions):
         # If PostgREST returned an error object, try to handle missing column errors gracefully
         err = getattr(response, "error", None)
         if err:
-            print(f"❌ Error detected: {err}")
+            print(f"Error detected: {err}")
             try:
                 # error may be dict-like with 'message'
                 msg = err.get("message") if isinstance(err, dict) else str(err)
@@ -83,7 +83,7 @@ def insert_transactions_supabase(transactions):
                 m = re.search(r"Could not find the '(.+?)' column", msg)
                 if m:
                     col = m.group(1)
-                    print(f"⚠️  Column '{col}' not found in DB, retrying without it...")
+                    print(f"Column '{col}' not found in DB, retrying without it...")
                     # remove the offending column from all payloads and retry once
                     for p in payload:
                         if col in p:
@@ -94,7 +94,7 @@ def insert_transactions_supabase(transactions):
                     return response_retry
         return response
     except Exception as exception:
-        print(f"❌ Exception during insert: {exception}")
+        print(f"Exception during insert: {exception}")
         import traceback
         traceback.print_exc()
         return exception
@@ -105,15 +105,15 @@ def categorize_transactions(transactions):
     The model is expected to accept a list of descriptions and produce labels matching your `category_id` values.
     """
     if category_model is None:
-        print("⚠️  Category model not loaded - skipping categorization")
+        print("Category model not loaded - skipping categorization")
         return transactions
 
     descriptions = [t.get("description", "") or "" for t in transactions]
     try:
         preds = category_model.predict(descriptions)
-        print(f"✓ Model predictions: {preds[:5]}...")  # Show first 5 predictions
+        print(f"Model predictions: {preds[:5]}...")  # Show first 5 predictions
     except Exception as e:
-        print("❌ Prediction failed:", e)
+        print("Prediction failed:", e)
         return transactions
 
     # Attempt to get probabilities if supported
@@ -222,6 +222,103 @@ def categorize_transactions(transactions):
     return transactions
 
 
+def update_monthly_income(transactions):
+    """Aggregate credit transactions by month (MM-YY) and upsert into public.income.
+
+    - Expects each transaction to have `date`, `transaction_type`, and `amount`.
+    - `transaction_type` matching is case-insensitive and checks for the string 'credit'.
+    - Month format stored as `MM-YY` (e.g. '03-25').
+    """
+    from datetime import datetime
+
+    def parse_month_key(date_val):
+        if not date_val:
+            return None
+        if isinstance(date_val, datetime):
+            return date_val.strftime("%m-%y")
+        s = str(date_val).strip()
+        fmts = [
+            "%Y-%m-%d",
+            "%Y-%m-%dT%H:%M:%S",
+            "%Y-%m-%dT%H:%M:%S.%f",
+            "%d-%m-%Y",
+            "%m/%d/%Y",
+            "%d/%m/%Y",
+            "%Y/%m/%d",
+        ]
+        for f in fmts:
+            try:
+                d = datetime.strptime(s, f)
+                return d.strftime("%m-%y")
+            except Exception:
+                continue
+        try:
+            parts = [p for p in s.replace("-","/").split("/") if p]
+            if len(parts) >= 3:
+                mm = int(parts[0]); yy = int(parts[2])
+                if yy > 31:
+                    yy_short = yy % 100
+                else:
+                    yy_short = yy
+                return f"{mm:02d}-{yy_short:02d}"
+        except Exception:
+            pass
+        return None
+
+    monthly = {}
+    for t in transactions:
+        try:
+            ttype = (t.get("transaction_type") or "").strip().lower()
+            if ttype != "credit":
+                continue
+            amt = t.get("amount")
+            if amt is None:
+                continue
+            try:
+                a = float(amt)
+                # Treat credit amounts as positive values (some feeds use negative numbers for credits)
+                a = abs(a)
+            except Exception:
+                try:
+                    a = float(str(amt).replace("$","").replace(",",""))
+                    a = abs(a)
+                except Exception:
+                    continue
+            month_key = parse_month_key(t.get("date"))
+            if not month_key:
+                continue
+            monthly[month_key] = monthly.get(month_key, 0.0) + a
+        except Exception:
+            continue
+
+    for month_key, total in monthly.items():
+        try:
+            # ensure total is positive and round to 2 decimals for money
+            total_pos = round(abs(total), 2)
+            resp = supabase.table("income").select("month,income").eq("month", month_key).execute()
+            data = None
+            err = None
+            if isinstance(resp, dict):
+                data = resp.get("data")
+                err = resp.get("error")
+            else:
+                data = getattr(resp, "data", None)
+                err = getattr(resp, "error", None)
+
+            if err:
+                print("Warning: income table lookup error:", err)
+                continue
+
+            if data and len(data) > 0:
+                upd = supabase.table("income").update({"income": total_pos}).eq("month", month_key).execute()
+                print(f"Updated income for {month_key}: {total_pos}", upd)
+            else:
+                ins = supabase.table("income").insert({"month": month_key, "income": total_pos}).execute()
+                print(f"Inserted income for {month_key}: {total_pos}", ins)
+        except Exception as e:
+            print("Failed to upsert income for", month_key, e)
+
+
 # FastAPI App
 app = FastAPI()
 
@@ -257,6 +354,12 @@ async def parse_statement(file: UploadFile = File(...), user=Depends(get_current
     result = insert_transactions_supabase(transactions)
     if isinstance(result, Exception):
         return {"error": str(result), "parsed_count": parsed_count}
+
+    # After successful insert, update monthly income aggregates (Credit transactions)
+    try:
+        update_monthly_income(transactions)
+    except Exception as e:
+        print("Failed to update monthly income:", e)
 
     # result.data usually contains inserted rows; result.count may also be present
     inserted_rows = None
