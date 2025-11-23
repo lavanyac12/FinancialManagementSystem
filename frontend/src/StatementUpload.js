@@ -7,7 +7,6 @@ function StatementUpload() {
   const [transactions, setTransactions] = useState([]);
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
 
   const handleFileChange = (e) => setFile(e.target.files[0]);
   const handleSubmit = async (e) => {
@@ -35,10 +34,7 @@ function StatementUpload() {
       // Do not display all transactions in the UI — show a short success message instead.
       setTransactions([]);
       setSuccess("Upload successful.");
-      setError("");
-    } catch (err) {
-      setError(err.response?.data?.detail || err.response?.data?.error || "Upload failed.");
-      setSuccess("");
+      setError(err.response?.data?.detail || err.response?.data?.error || "Upload failed.");    
     }
   };
 
