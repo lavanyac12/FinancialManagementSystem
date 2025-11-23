@@ -20,7 +20,7 @@ function TransactionsTable({ transactions }) {
             <td>{tx.description}</td>
             <td>{tx.amount}</td>
             <td>{tx.transaction_type}</td>
-            <td>{tx.category || "-"}</td>
+            <td>{tx.category_id || "-"}</td>
           </tr>
         ))}
       </tbody>
