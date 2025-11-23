@@ -91,7 +91,6 @@ class StatementParser:
                 "description": description,
                 "amount": amount,
                 "transaction_type": tx_type,
-                "category": None  # Placeholder until ML categorization
             })
 
         return transactions
