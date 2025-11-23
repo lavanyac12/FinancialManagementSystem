@@ -1,28 +1,26 @@
-import React, { useState } from "react";
+import React from "react";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import "./App.css";
-import StatementUpload from "./StatementUpload";
 import Login from "./Login";
+import Dashboard from "./Dashboard";
+import ProtectedRoute from "./ProtectedRoute";
 
 function App() {
-  const [token, setToken] = useState(localStorage.getItem('supabase_token'));
-
-  const handleLogin = (t) => {
-    setToken(t);
-  };
-
   return (
-    <div className="app-container">
-      {/* Header */}
-      <header className="header">
-        <span>Finance Management</span>
-      </header>
-
-      {/* Dashboard */}
-      <div className="dashboard">
-        <Login onLogin={handleLogin} />
-        <StatementUpload />
-      </div>
-    </div>
+    <Router>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="/" element={<Navigate to="/login" replace />} />
+      </Routes>
+    </Router>
   );
 }
 
