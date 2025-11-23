@@ -3,4 +3,8 @@ python-dotenv==1.2.1
 scikit-learn
 pandas
 joblib
+fastapi
+uvicorn
+requests
+python-multipart
 
