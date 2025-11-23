@@ -32,6 +32,28 @@ else:
 def insert_transactions_supabase(transactions):
     try:
         response = supabase.table("transactions").insert(transactions).execute()
+        # If PostgREST returned an error object, try to handle missing column errors gracefully
+        err = getattr(response, "error", None)
+        if err:
+            try:
+                # error may be dict-like with 'message'
+                msg = err.get("message") if isinstance(err, dict) else str(err)
+            except Exception:
+                msg = str(err)
+            # detect missing column pattern
+            if msg and "Could not find the '" in msg:
+                import re
+
+                m = re.search(r"Could not find the '(.+?)' column", msg)
+                if m:
+                    col = m.group(1)
+                    # remove the offending column from all transactions and retry once
+                    for t in transactions:
+                        if col in t:
+                            del t[col]
+                    # retry
+                    response_retry = supabase.table("transactions").insert(transactions).execute()
+                    return response_retry
         return response
     except Exception as exception:
         return exception
@@ -60,20 +82,47 @@ def categorize_transactions(transactions):
     except Exception:
         probs = [None] * len(preds)
 
+    # Use hard-coded mapping of category name -> id (provided by system)
+    hardcoded_map = {
+        "transit": 1,
+        "dining": 2,
+        "food": 2,
+        "groceries": 3,
+        "grocery": 3,
+        "other": 4,
+        "shopping": 5,
+        "subscription": 6,
+        "subscriptions": 6,
+        "home": 7,
+        "rent": 7,
+    }
+
     for t, p, conf in zip(transactions, preds, probs):
-        # keep types compatible with your DB: if p is numeric string cast to int
         try:
             if isinstance(p, str) and p.isdigit():
                 t["category_id"] = int(p)
             else:
-                t["category_id"] = p
+                cat_name = str(p).strip().lower()
+                if cat_name == "":
+                    # leave category unset
+                    continue
+                # first try hardcoded mapping
+                if cat_name in hardcoded_map:
+                    t["category_id"] = hardcoded_map[cat_name]
+                else:
+                    # Do not query the `category` table; rely only on the hard-coded map.
+                    # If the predicted label doesn't match the hard-coded names, leave `category_id` unset.
+                    pass
         except Exception:
-            t["category_id"] = p
-        if conf is not None:
+            # fallback: assign raw prediction if it's an int-like
             try:
-                t["category_confidence"] = float(conf)
+                if isinstance(p, int):
+                    t["category_id"] = p
             except Exception:
-                t["category_confidence"] = None
+                pass
+        # ensure we don't include a 'category' key that could break schema
+        if "category" in t:
+            t.pop("category")
     return transactions
 
 
