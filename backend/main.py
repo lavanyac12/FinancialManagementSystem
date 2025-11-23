@@ -3,15 +3,8 @@ from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from backend.parse import StatementParser
 import os
-import psycopg2
-from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
-
-# Load .env variables
-load_dotenv()
 from supabase import create_client
-import os
-from dotenv import load_dotenv
 
 load_dotenv()
 SUPABASE_URL = os.getenv("SUPABASE_URL")
