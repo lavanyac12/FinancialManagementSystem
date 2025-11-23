@@ -1,10 +1,11 @@
 import React, { useState } from "react";
 import axios from "axios";
-import TransactionTable from "./TransactionTable";
+// We no longer render the full transactions list after upload — show a success message instead.
 
 function StatementUpload() {
   const [file, setFile] = useState(null);
   const [transactions, setTransactions] = useState([]);
+  const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
 
   const handleFileChange = (e) => setFile(e.target.files[0]);
@@ -14,11 +15,16 @@ function StatementUpload() {
     const formData = new FormData();
     formData.append("file", file);
     try {
-      const res = await axios.post("http://localhost:8000/parse-statement", formData);
-      setTransactions(res.data);
+      const API_ROOT = process.env.REACT_APP_API_URL || "http://localhost:8001";
+      const res = await axios.post(`${API_ROOT}/parse-statement`, formData);
+      // backend returns { message, supabase_response }
+      // Do not display all transactions in the UI — show a short success message instead.
+      setTransactions([]);
+      setSuccess("Upload successful.");
       setError("");
     } catch (err) {
-      setError(err.response?.data?.detail || "Upload failed.");
+      setError(err.response?.data?.detail || err.response?.data?.error || "Upload failed.");
+      setSuccess("");
     }
   };
 
@@ -29,7 +35,7 @@ function StatementUpload() {
         <button type="submit">Upload</button>
       </form>
       {error && <div style={{ color: "red" }}>{error}</div>}
-      <TransactionTable transactions={transactions} />
+      {success && <div style={{ color: "green", marginTop: 8 }}>{success}</div>}
     </div>
   );
 }
