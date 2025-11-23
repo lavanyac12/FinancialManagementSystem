@@ -9,11 +9,34 @@ from supabase import create_client
 import joblib
 from pathlib import Path
 import json
+from pydantic import BaseModel, Field, validator
+from decimal import Decimal, ROUND_HALF_UP
 
 load_dotenv()
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+
+def _normalize_decimal_for_db(d: Decimal):
+    """Return an int if `d` has no fractional part, otherwise a float.
+
+    This helps when the Postgres column is integer but our Pydantic model
+    uses Decimal with 2 decimal places (e.g. 5.00) which would be sent as
+    5.0 and can trigger "invalid input syntax for type integer: \"5.0\"".
+    """
+    try:
+        if d == d.to_integral_value():
+            return int(d)
+        return float(d)
+    except Exception:
+        try:
+            fv = float(d)
+            if fv.is_integer():
+                return int(fv)
+            return fv
+        except Exception:
+            return d
 
 # Load category model if present
 MODEL_PATH = os.getenv("CATEGORY_MODEL_PATH", "backend/models/tx_category_model.joblib")
@@ -318,6 +341,41 @@ def update_monthly_income(transactions):
         except Exception as e:
             print("Failed to upsert income for", month_key, e)
 
+    # After updating monthly income, recompute and persist amount_saved for all goals
+    try:
+        try:
+            total_income = _get_total_income()
+        except Exception as e:
+            print("Failed to compute total income for goals update:", e)
+            total_income = Decimal("0.00")
+
+        # fetch all goals
+        resp = supabase.table("goals").select("goal_id,income_allocation").execute()
+        goals_data = None
+        if isinstance(resp, dict):
+            goals_data = resp.get("data")
+        else:
+            goals_data = getattr(resp, "data", None)
+
+        if goals_data:
+            for g in goals_data:
+                try:
+                    gid = g.get("goal_id") if isinstance(g, dict) else None
+                    raw_alloc = g.get("income_allocation") if isinstance(g, dict) else None
+                    if raw_alloc is None:
+                        alloc = Decimal("0")
+                    else:
+                        alloc = Decimal(str(raw_alloc))
+
+                    new_amount = (total_income * (alloc / Decimal(100))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                    # write back to DB
+                    upd = supabase.table("goals").update({"amount_saved": float(new_amount)}).eq("goal_id", gid).execute()
+                    print(f"Updated goal {gid} amount_saved -> {new_amount}", getattr(upd, 'data', None) or (upd.get('data') if isinstance(upd, dict) else None))
+                except Exception as e:
+                    print("Failed to update goal amount_saved for goal:", g, e)
+    except Exception as e:
+        print("Failed to persist updated goal savings:", e)
+
 
 # FastAPI App
 app = FastAPI()
@@ -381,3 +439,128 @@ async def parse_statement(file: UploadFile = File(...), user=Depends(get_current
 @app.get("/")
 def read_root():
     return {"message": "API is running"}
+
+
+# --- Smart Goals API -----------------------------------------------------
+
+
+class SmartGoalIn(BaseModel):
+    name: str = Field(..., max_length=50)
+    target_amount: Decimal = Field(...)
+    income_allocation: Decimal = Field(...)
+
+    @validator("target_amount")
+    def target_amount_positive(cls, v):
+        try:
+            fv = float(v)
+        except Exception:
+            raise ValueError("target_amount must be numeric")
+        if fv <= 1:
+            raise ValueError("target_amount must be greater than 1")
+        # round to 2 decimals
+        return Decimal(v).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    @validator("income_allocation")
+    def allocation_range(cls, v):
+        try:
+            fv = float(v)
+        except Exception:
+            raise ValueError("income_allocation must be numeric")
+        if fv < 0 or fv > 99:
+            raise ValueError("income_allocation must be between 0 and 99")
+        # store as Decimal with up to 2 decimals
+        return Decimal(v).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _get_total_income():
+    """Return the total income sum from `public.income` as Decimal (sum of all months)."""
+    try:
+        resp = supabase.table("income").select("income").execute()
+        data = getattr(resp, "data", None) or (resp.get("data") if isinstance(resp, dict) else None)
+        total = Decimal("0.00")
+        if data:
+            for row in data:
+                try:
+                    val = row.get("income") if isinstance(row, dict) else None
+                    if val is None:
+                        continue
+                    total += Decimal(str(val))
+                except Exception:
+                    continue
+        return total
+    except Exception as e:
+        print("Failed to read income table:", e)
+        return Decimal("0.00")
+
+
+@app.get("/smart-goals")
+def list_smart_goals():
+    """Return list of smart goals from `public.goals`."""
+    try:
+        resp = supabase.table("goals").select("*").execute()
+        data = getattr(resp, "data", None) or (resp.get("data") if isinstance(resp, dict) else None)
+        return {"goals": data or []}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def _insert_goal_record(payload: dict):
+    # try inserting into public.goals
+    try:
+        resp = supabase.table("goals").insert(payload).execute()
+        return resp
+    except Exception as e:
+        print("Failed to insert goal:", e)
+        raise
+
+
+@app.post("/smart-goals")
+def create_smart_goal(goal_in: SmartGoalIn):
+    """Create a Smart Goal, compute allocated amount_saved based on income allocations, and save to DB."""
+    total_income = _get_total_income()
+    alloc_pct = goal_in.income_allocation
+    allocated = (total_income * (alloc_pct / Decimal(100))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    payload = {
+        "name": goal_in.name,
+        "target_amount": float(goal_in.target_amount),
+        "income_allocation": _normalize_decimal_for_db(goal_in.income_allocation),
+        "amount_saved": float(allocated),
+    }
+
+    try:
+        resp = _insert_goal_record(payload)
+        return {"message": "Goal created", "goal": getattr(resp, "data", None) or resp.get("data")}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.put("/smart-goals/{goal_id}")
+def update_smart_goal(goal_id: int, goal_in: SmartGoalIn):
+    """Update an existing Smart Goal and recompute amount_saved based on allocation."""
+    total_income = _get_total_income()
+    alloc_pct = goal_in.income_allocation
+    allocated = (total_income * (alloc_pct / Decimal(100))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    payload = {
+        "name": goal_in.name,
+        "target_amount": float(goal_in.target_amount),
+        "income_allocation": _normalize_decimal_for_db(goal_in.income_allocation),
+        "amount_saved": float(allocated),
+    }
+
+    try:
+        resp = supabase.table("goals").update(payload).eq("goal_id", goal_id).execute()
+        return {"message": "Goal updated", "result": getattr(resp, "data", None) or resp.get("data")}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.delete("/smart-goals/{goal_id}")
+def delete_smart_goal(goal_id: int):
+    """Delete a Smart Goal by goal_id."""
+    try:
+        resp = supabase.table("goals").delete().eq("goal_id", goal_id).execute()
+        return {"message": "Goal deleted", "result": getattr(resp, "data", None) or resp.get("data")}
+    except Exception as e:
+        return {"error": str(e)}
