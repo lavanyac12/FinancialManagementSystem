@@ -9,10 +9,12 @@ function ExpensePieChart() {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [months, setMonths] = useState([]);
+  const [selectedMonths, setSelectedMonths] = useState([]);
 
   useEffect(() => {
     fetchExpenseData();
-  }, []);
+  }, [selectedMonths]);
 
   const fetchExpenseData = async () => {
     try {
@@ -39,10 +41,10 @@ function ExpensePieChart() {
       console.log("Fetched categories from backend:", categories);
       console.log("Number of categories:", categories.length);
 
-      // Fetch transactions from Supabase
+      // Fetch transactions from Supabase (include date)
       const { data: transactions, error: txError } = await supabase
         .from("transactions")
-        .select("amount, transaction_type, category_id");
+        .select("amount, transaction_type, category_id, date");
 
       if (txError) {
         console.error("Error fetching transactions:", txError);
@@ -51,8 +53,10 @@ function ExpensePieChart() {
         return;
       }
 
+
       if (!transactions || transactions.length === 0) {
         setData([]);
+        setMonths([]);
         setLoading(false);
         return;
       }
@@ -65,6 +69,20 @@ function ExpensePieChart() {
         desc: t.description 
       })));
 
+
+      // Extract unique months from transaction dates (format: YYYY-MM)
+      const allMonths = Array.from(new Set(
+        transactions
+          .map(tx => tx.date && tx.date.slice(0, 7))
+          .filter(Boolean)
+      ));
+      allMonths.sort((a, b) => b.localeCompare(a)); // Ascending order
+      setMonths(allMonths);
+      // If no months selected, select all by default
+      if (selectedMonths.length === 0 && allMonths.length > 0) {
+        setSelectedMonths(allMonths);
+      }
+
       // Create category lookup map
       const categoryMap = {};
       categories.forEach(cat => {
@@ -73,13 +91,13 @@ function ExpensePieChart() {
 
       console.log("Category map:", categoryMap);
 
-      // Filter only expenses (negative amounts OR debit transactions)
-      // Only include transactions where transaction_type is exactly 'Debit' (case-insensitive)
+
+      // Only include transactions where transaction_type is exactly 'Debit' (case-insensitive) and matches selected months
       const expenses = transactions.filter((tx) => {
-        return (
-          tx.transaction_type &&
-          tx.transaction_type.trim().toLowerCase() === 'debit'
-        );
+        const isDebit = tx.transaction_type && tx.transaction_type.trim().toLowerCase() === 'debit';
+        const txMonth = tx.date && tx.date.slice(0, 7);
+        const inSelected = selectedMonths.length === 0 || (txMonth && selectedMonths.includes(txMonth));
+        return isDebit && inSelected;
       });
 
       console.log(`Total transactions: ${transactions.length}, Debit Expenses: ${expenses.length}`);
@@ -146,18 +164,75 @@ function ExpensePieChart() {
     return <div style={{ textAlign: 'center', padding: '20px', color: 'red' }}>{error}</div>;
   }
 
+
+  // Month multi-select buttons
+  const handleMonthToggle = (month) => {
+    if (selectedMonths.includes(month)) {
+      setSelectedMonths(selectedMonths.filter(m => m !== month));
+    } else {
+      setSelectedMonths([...selectedMonths, month]);
+    }
+  };
+
   if (data.length === 0) {
     return (
       <div style={{ textAlign: 'center', padding: '20px' }}>
-        No expense data available. Upload transactions to see the breakdown.
+        {months.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <span style={{ marginRight: 8 }}>Filter by Month:</span>
+            {months.map(month => (
+              <button
+                key={month}
+                onClick={() => handleMonthToggle(month)}
+                style={{
+                  margin: '0 4px',
+                  padding: '6px 12px',
+                  borderRadius: 4,
+                  border: selectedMonths.includes(month) ? '2px solid #1976d2' : '1px solid #ccc',
+                  background: selectedMonths.includes(month) ? '#1976d2' : '#f5f5f5',
+                  color: selectedMonths.includes(month) ? '#fff' : '#333',
+                  cursor: 'pointer',
+                  fontWeight: selectedMonths.includes(month) ? 'bold' : 'normal',
+                }}
+              >
+                {month}
+              </button>
+            ))}
+          </div>
+        )}
+        No expense data available for selected month(s). Upload transactions to see the breakdown.
       </div>
     );
   }
 
   return (
-    <div style={{ width: '100%', height: 400 }}>
+    <div style={{ width: '100%', height: 440 }}>
       <h3 style={{ textAlign: 'center', marginBottom: '20px' }}>Expenses by Category</h3>
-      <ResponsiveContainer width="100%" height="100%">
+      {/* Month multi-select buttons */}
+      {months.length > 0 && (
+        <div style={{ textAlign: 'center', marginBottom: 16 }}>
+          <span style={{ marginRight: 8 }}>Filter by Month:</span>
+          {months.map(month => (
+            <button
+              key={month}
+              onClick={() => handleMonthToggle(month)}
+              style={{
+                margin: '0 4px',
+                padding: '6px 12px',
+                borderRadius: 4,
+                border: selectedMonths.includes(month) ? '2px solid #1976d2' : '1px solid #ccc',
+                background: selectedMonths.includes(month) ? '#1976d2' : '#f5f5f5',
+                color: selectedMonths.includes(month) ? '#fff' : '#333',
+                cursor: 'pointer',
+                fontWeight: selectedMonths.includes(month) ? 'bold' : 'normal',
+              }}
+            >
+              {month}
+            </button>
+          ))}
+        </div>
+      )}
+      <ResponsiveContainer width="100%" height={400}>
         <PieChart>
           <Pie
             data={data}
