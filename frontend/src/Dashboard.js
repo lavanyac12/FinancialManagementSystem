@@ -3,6 +3,7 @@ import StatementUpload from "./StatementUpload";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "./supabaseClient";
 import SmartGoalsButton from "./SmartGoals";
+import ExpensePieChart from "./ExpensePieChart";
 
 function Dashboard() {
   const navigate = useNavigate();
@@ -28,8 +29,14 @@ function Dashboard() {
 
       {/* Dashboard */}
       <div className="dashboard">
-        <h2>Upload Statement</h2>
-        <StatementUpload />
+        <div style={{ marginBottom: '40px' }}>
+          <h2>Upload Statement</h2>
+          <StatementUpload />
+        </div>
+
+        <div style={{ marginTop: '40px', background: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+          <ExpensePieChart />
+        </div>
       </div>
     </div>
   );
