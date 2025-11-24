@@ -556,6 +556,16 @@ def update_smart_goal(goal_id: int, goal_in: SmartGoalIn):
         return {"error": str(e)}
 
 
+@app.get("/categories")
+def get_categories(auth_payload: dict = Depends(get_current_user)):
+    """Fetch all categories for the pie chart."""
+    try:
+        resp = supabase.table("category").select("category_id, category_name").execute()
+        return {"categories": getattr(resp, "data", None) or resp.get("data")}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @app.delete("/smart-goals/{goal_id}")
 def delete_smart_goal(goal_id: int):
     """Delete a Smart Goal by goal_id."""
