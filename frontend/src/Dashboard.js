@@ -7,6 +7,7 @@ import ExpensePieChart from "./ExpensePieChart";
 
 function Dashboard() {
   const navigate = useNavigate();
+  const [smartGoalsOpen, setSmartGoalsOpen] = useState(false);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -20,7 +21,7 @@ function Dashboard() {
       <header className="header">
         <span>Finance Management</span>
         <div style={{ marginLeft: "auto", display: "flex", gap: 12, alignItems: "center" }}>
-          <SmartGoalsButton />
+          <SmartGoalsButton onOpenChange={setSmartGoalsOpen} />
           <button className="upload-btn" onClick={handleLogout} style={{ cursor: "pointer", marginRight: 50 }}>
             Logout
           </button>
@@ -34,9 +35,11 @@ function Dashboard() {
           <StatementUpload />
         </div>
 
-        <div style={{ marginTop: '40px', background: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
-          <ExpensePieChart />
-        </div>
+        {!smartGoalsOpen && (
+          <div style={{ marginTop: '40px', background: '#fff', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+            <ExpensePieChart />
+          </div>
+        )}
       </div>
     </div>
   );
