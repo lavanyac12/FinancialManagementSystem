@@ -2,14 +2,25 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { supabase } from "./supabaseClient";
 
-export default function SmartGoalsButton() {
+export default function SmartGoalsButton({ onOpenChange }) {
   const [open, setOpen] = useState(false);
+  
+  const handleOpen = () => {
+    setOpen(true);
+    if (onOpenChange) onOpenChange(true);
+  };
+  
+  const handleClose = () => {
+    setOpen(false);
+    if (onOpenChange) onOpenChange(false);
+  };
+  
   return (
     <>
-      <button className="upload-btn" onClick={() => setOpen(true)}>
+      <button className="upload-btn" onClick={handleOpen}>
         Smart Goals
       </button>
-      {open && <SmartGoalsModal onClose={() => setOpen(false)} />}
+      {open && <SmartGoalsModal onClose={handleClose} />}
     </>
   );
 }
