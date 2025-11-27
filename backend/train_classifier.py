@@ -26,11 +26,10 @@ def build_and_train(csv_path: str, model_out: str, test_size: float = 0.15, rand
         raise RuntimeError(f"Training CSV not found at {csv_path}")
 
     df = pd.read_csv(csv_path)
-    # Normalize column names to find description and category columns (case-insensitive)
+    # Normalize column names to find description and category columns 
     col_map = {c.lower(): c for c in df.columns}
     desc_col = None
     cat_col = None
-    # common possibilities
     for candidate in ("description", "desc", "transaction description", "details"):
         if candidate in col_map:
             desc_col = col_map[candidate]
@@ -70,7 +69,7 @@ def build_and_train(csv_path: str, model_out: str, test_size: float = 0.15, rand
     ])
 
     if use_all:
-        # Optionally report cross-validated score if dataset is large enough
+        # Report cross-validated score if dataset is large enough
         from sklearn.model_selection import StratifiedKFold, cross_val_score
 
         n_samples = len(y)

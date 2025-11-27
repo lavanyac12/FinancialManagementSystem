@@ -94,7 +94,7 @@ class TestInsertTransactions:
         
         result = insert_transactions_supabase(transactions)
         
-        # Function returns the response object, not a dict
+        # Function returns the response object
         assert hasattr(result, 'data')
         assert result.data == [{"id": 1}]
     
@@ -240,7 +240,7 @@ class TestSmartGoalsEndpoint:
         
         response = client.post("/smart-goals", json=goal_data)
         
-        # May require auth - check for success or auth error
+        # Check for success or auth error
         assert response.status_code in [200, 401, 403, 422]
 
 
