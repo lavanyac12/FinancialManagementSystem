@@ -5,11 +5,11 @@ Run with: pytest backend/test_parse.py -v
 
 import pytest
 from io import BytesIO
-from backend.parse import StatementParser
+from backend.parse import FileReader
 import pandas as pd
 
 
-class TestStatementParser:
+class TestFileReader:
     """Test CSV statement parsing."""
     
     def test_parse_simple_csv(self):
@@ -20,7 +20,7 @@ class TestStatementParser:
 2024-01-17,Grocery Store,-45.30,Debit"""
         
         csv_bytes = csv_content.encode()
-        transactions = StatementParser.parse_statement(csv_bytes, "test.csv")
+        transactions = FileReader.parseTransaction(csv_bytes, "test.csv")
         
         assert len(transactions) == 3
         assert transactions[0]["description"] == "Coffee Shop"
@@ -34,7 +34,7 @@ class TestStatementParser:
 01/16/2024,Paycheck,3000.00,Credit"""
         
         csv_bytes = csv_content.encode()
-        transactions = StatementParser.parse_statement(csv_bytes, "test.csv")
+        transactions = FileReader.parseTransaction(csv_bytes, "test.csv")
         
         assert len(transactions) == 2
         assert transactions[0]["description"] == "Starbucks"
@@ -44,7 +44,7 @@ class TestStatementParser:
         csv_content = """Date,Description,Amount,Type of Transaction"""
         
         csv_bytes = csv_content.encode()
-        transactions = StatementParser.parse_statement(csv_bytes, "test.csv")
+        transactions = FileReader.parseTransaction(csv_bytes, "test.csv")
         
         assert len(transactions) == 0
     
@@ -56,7 +56,7 @@ class TestStatementParser:
 2024-01-17,Store,-20.00,Debit"""
         
         csv_bytes = csv_content.encode()
-        transactions = StatementParser.parse_statement(csv_bytes, "test.csv")
+        transactions = FileReader.parseTransaction(csv_bytes, "test.csv")
         
         # Should handle missing description
         assert len(transactions) == 3
@@ -69,7 +69,7 @@ class TestStatementParser:
 2024-01-17,Payment,-100.00,Debit"""
         
         csv_bytes = csv_content.encode()
-        transactions = StatementParser.parse_statement(csv_bytes, "test.csv")
+        transactions = FileReader.parseTransaction(csv_bytes, "test.csv")
         
         assert len(transactions) == 3
         debits = [tx for tx in transactions if tx.get("amount", 0) < 0]
@@ -85,7 +85,7 @@ class TestStatementParser:
 2024-01-16,Transaction 2,-15.00,Debit"""
         
         csv_bytes = csv_content.encode()
-        transactions = StatementParser.parse_statement(csv_bytes, "test.csv")
+        transactions = FileReader.parseTransaction(csv_bytes, "test.csv")
         
         # Parser should attempt to normalize date formats
         assert len(transactions) >= 1
@@ -100,7 +100,7 @@ class TestStatementParser:
 2024-01-17,Store #123,-25.00,Debit"""
         
         csv_bytes = csv_content.encode()
-        transactions = StatementParser.parse_statement(csv_bytes, "test.csv")
+        transactions = FileReader.parseTransaction(csv_bytes, "test.csv")
         
         assert len(transactions) == 3
         # Check that special characters are preserved
@@ -116,7 +116,7 @@ class TestTransactionValidation:
 2024-01-15,Coffee Shop,-5.50,Debit"""
         
         csv_bytes = csv_content.encode()
-        transactions = StatementParser.parse_statement(csv_bytes, "test.csv")
+        transactions = FileReader.parseTransaction(csv_bytes, "test.csv")
         
         for tx in transactions:
             assert "date" in tx or "description" in tx
@@ -129,7 +129,7 @@ class TestTransactionValidation:
 2024-01-16,Store,-10,Debit"""
         
         csv_bytes = csv_content.encode()
-        transactions = StatementParser.parse_statement(csv_bytes, "test.csv")
+        transactions = FileReader.parseTransaction(csv_bytes, "test.csv")
         
         for tx in transactions:
             assert isinstance(tx["amount"], (int, float))
