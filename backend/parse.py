@@ -6,17 +6,9 @@ from datetime import datetime
 MAX_FILE_SIZE_MB = 10
 REQUIRED_COLUMNS = ["Date", "Description", "Amount", "Type of Transaction"]
 
-class StatementParser:
-    """
-    Handles:
-    - File validation
-    - Structural validation
-    - Parsing into clean transaction dictionaries
-    """
-
+class FileReader:
     @staticmethod
-    def validate_file(file_bytes: bytes, filename: str):
-        # --- File size validation ---
+    def validateFile(file_bytes: bytes, filename: str):
         size_in_mb = len(file_bytes) / (1024 * 1024)
         if size_in_mb > MAX_FILE_SIZE_MB:
             raise HTTPException(
@@ -24,7 +16,6 @@ class StatementParser:
                 detail="File too large. Maximum allowed size is 10MB."
             )
 
-        # --- File type validation ---
         if not (filename.endswith(".csv") or filename.endswith(".xlsx") or filename.endswith(".xls")):
             raise HTTPException(
                 status_code=400,
@@ -32,7 +23,7 @@ class StatementParser:
             )
 
     @staticmethod
-    def load_dataframe(file_bytes: bytes, filename: str) -> pd.DataFrame:
+    def loadDataframe(file_bytes: bytes, filename: str) -> pd.DataFrame:
         try:
             if filename.endswith(".csv"):
                 df = pd.read_csv(io.BytesIO(file_bytes))
@@ -46,7 +37,7 @@ class StatementParser:
         return df
 
     @staticmethod
-    def validate_columns(df: pd.DataFrame):
+    def validateColumns(df: pd.DataFrame):
         missing = [col for col in REQUIRED_COLUMNS if col not in df.columns]
         if missing:
             raise HTTPException(
@@ -55,11 +46,10 @@ class StatementParser:
             )
 
     @staticmethod
-    def clean_and_parse(df: pd.DataFrame):
+    def cleanAndParse(df: pd.DataFrame):
         transactions = []
 
         for _, row in df.iterrows():
-            # --- Validate each field ---
             if pd.isna(row["Amount"]) or row["Amount"] == "":
                 raise HTTPException(
                     status_code=400,
@@ -96,18 +86,10 @@ class StatementParser:
         return transactions
 
     @staticmethod
-    def parse_statement(file_bytes: bytes, filename: str):
-        """
-        High-level function:
-        1. Validate file
-        2. Load dataframe
-        3. Validate structure
-        4. Clean & convert
-        5. Return transaction list
-        """
-        StatementParser.validate_file(file_bytes, filename)
-        df = StatementParser.load_dataframe(file_bytes, filename)
-        StatementParser.validate_columns(df)
+    def parseTransaction(file_bytes: bytes, filename: str):
+        FileReader.validateFile(file_bytes, filename)
+        df = FileReader.loadDataframe(file_bytes, filename)
+        FileReader.validateColumns(df)
 
-        transactions = StatementParser.clean_and_parse(df)
+        transactions = FileReader.cleanAndParse(df)
         return transactions

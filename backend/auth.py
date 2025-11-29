@@ -4,19 +4,44 @@ import os
 import requests
 from dotenv import load_dotenv
 
-# Ensure .env is loaded when this module is imported (helps when main.py
-# imports this module before calling load_dotenv itself).
 load_dotenv()
 
 security = HTTPBearer()
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-def get_current_user(credentials: HTTPAuthorizationCredentials = Security(security)):
-    """Verify the incoming Supabase JWT by calling Supabase's /auth/v1/user endpoint.
+class Authenticator:
+    
+    def __init__(self, supabase_url=None, supabase_key=None):
+        self.supabase_url = supabase_url or SUPABASE_URL
+        self.supabase_key = supabase_key or SUPABASE_KEY
+    
+    def verifyCredentials(self, token: str):
+        if not self.supabase_url or not self.supabase_key:
+            raise HTTPException(status_code=500, detail="SUPABASE_URL and SUPABASE_KEY must be set on the server")
+        
+        if not token:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+        
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "apikey": self.supabase_key,
+        }
+        
+        try:
+            resp = requests.get(f"{self.supabase_url}/auth/v1/user", headers=headers, timeout=5)
+        except requests.RequestException as exc:
+            raise HTTPException(status_code=502, detail=f"Auth provider error: {exc}")
+        
+        if resp.status_code != 200:
+            detail = resp.text or "Invalid token"
+            raise HTTPException(status_code=401, detail=f"Invalid token: {detail}")
+        
+        return resp.json()
 
-    Requires SUPABASE_URL and SUPABASE_KEY to be configured in environment (.env).
-    """
+authenticator = Authenticator()
+
+def getCurrentUser(credentials: HTTPAuthorizationCredentials = Security(security)):
     if not SUPABASE_URL or not SUPABASE_KEY:
         raise HTTPException(status_code=500, detail="SUPABASE_URL and SUPABASE_KEY must be set on the server")
 
@@ -35,7 +60,6 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Security(securi
         raise HTTPException(status_code=502, detail=f"Auth provider error: {exc}")
 
     if resp.status_code != 200:
-        # Try to include response body for debugging if present
         detail = resp.text or "Invalid token"
         raise HTTPException(status_code=401, detail=f"Invalid token: {detail}")
 
