@@ -1,8 +1,8 @@
-# FinancialManagementSystem
+# Financial Management System
 
 ## Overview
 
-FinancialManagementSystem is a full-stack web application designed to help users manage their finances efficiently. It provides secure authentication, transaction categorization, statement uploads, smart goal tracking, and real-time data visualization.
+Financial Management System is a full-stack web application designed to help users manage their finances efficiently. It provides secure authentication, transaction categorization, statement uploads, smart goal tracking, and real-time data visualization.
 
 ## Features
 
