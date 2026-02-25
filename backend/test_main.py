@@ -6,7 +6,7 @@ Run with: pytest backend/test_main.py -v
 import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import Mock, patch, MagicMock
-from backend.main import app, categorize_transactions, insert_transactions_supabase
+from backend.main import app, categorizeTransaction, insertTransaction
 import json
 
 
@@ -41,7 +41,7 @@ class TestHealthCheck:
 class TestCategorization:
     """Test transaction categorization logic."""
     
-    def test_categorize_transactions_with_model(self):
+    def test_categorizeTransaction_with_model(self):
         """Test categorization when model is loaded."""
         transactions = [
             {"description": "Starbucks Coffee", "amount": -5.50},
@@ -53,19 +53,19 @@ class TestCategorization:
             mock_model.predict.return_value = ["Dining", "Transit", "Groceries"]
             mock_model.predict_proba.return_value = [[0.95], [0.88], [0.92]]
             
-            result = categorize_transactions(transactions)
+            result = categorizeTransaction(transactions)
             
             assert len(result) == 3
             assert all("category_id" in tx for tx in result)
     
-    def test_categorize_transactions_without_model(self):
+    def test_categorizeTransaction_without_model(self):
         """Test categorization when model is not loaded."""
         transactions = [
             {"description": "Test Transaction", "amount": -10.00}
         ]
         
         with patch('backend.main.category_model', None):
-            result = categorize_transactions(transactions)
+            result = categorizeTransaction(transactions)
             
             # Should return transactions unchanged
             assert result == transactions
@@ -92,7 +92,7 @@ class TestInsertTransactions:
             }
         ]
         
-        result = insert_transactions_supabase(transactions)
+        result = insertTransaction(transactions)
         
         # Function returns the response object
         assert hasattr(result, 'data')
@@ -115,7 +115,7 @@ class TestInsertTransactions:
             }
         ]
         
-        result = insert_transactions_supabase(transactions)
+        result = insertTransaction(transactions)
         
         # Should handle missing category_id gracefully and return response object
         assert hasattr(result, 'data') or isinstance(result, Exception)
@@ -124,11 +124,11 @@ class TestInsertTransactions:
 class TestParseStatementEndpoint:
     """Test CSV statement parsing endpoint."""
     
-    @patch('backend.main.get_current_user')
-    @patch('backend.main.StatementParser.parse_statement')
-    @patch('backend.main.categorize_transactions')
-    @patch('backend.main.insert_transactions_supabase')
-    def test_parse_statement_success(
+    @patch('backend.main.getCurrentUser')
+    @patch('backend.main.FileReader.parseTransaction')
+    @patch('backend.main.categorizeTransaction')
+    @patch('backend.main.insertTransaction')
+    def test_parseTransaction_success(
         self, 
         mock_insert, 
         mock_categorize, 
@@ -184,9 +184,9 @@ class TestParseStatementEndpoint:
 class TestCategoriesEndpoint:
     """Test categories endpoint."""
     
-    @patch('backend.main.get_current_user')
+    @patch('backend.main.getCurrentUser')
     @patch('backend.main.supabase')
-    def test_get_categories_success(self, mock_supabase, mock_auth, client):
+    def test_getCategoryNames_success(self, mock_supabase, mock_auth, client):
         """Test successful retrieval of categories."""
         # Mock authentication
         mock_auth.return_value = {"id": "user123"}
@@ -213,7 +213,7 @@ class TestCategoriesEndpoint:
             assert "categories" in data
             assert len(data["categories"]) == 3
     
-    def test_get_categories_unauthorized(self, client):
+    def test_getCategoryNames_unauthorized(self, client):
         """Test categories endpoint without authentication."""
         response = client.get("/categories")
         
@@ -225,7 +225,7 @@ class TestSmartGoalsEndpoint:
     """Test Smart Goals CRUD operations."""
     
     @patch('backend.main.supabase')
-    def test_create_smart_goal(self, mock_supabase, client):
+    def test_createSmartGoal(self, mock_supabase, client):
         """Test creating a new smart goal."""
         mock_response = Mock()
         mock_response.data = [{"goal_id": 1, "name": "Emergency Fund"}]
@@ -270,7 +270,7 @@ class TestMonthlyIncomeEndpoint:
     """Test monthly income update endpoint."""
     
     @patch('backend.main.supabase')
-    def test_update_monthly_income(self, mock_supabase, client):
+    def test_calculateIncome(self, mock_supabase, client):
         """Test updating monthly income."""
         mock_response = Mock()
         mock_response.data = [{"month": "2024-01", "total_income": 5000}]

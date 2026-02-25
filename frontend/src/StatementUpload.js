@@ -1,8 +1,7 @@
 import React, { useState } from "react";
 import axios from "axios";
-// We no longer render the full transactions list after upload — show a success message instead.
 
-function StatementUpload() {
+function StatementUpload({ onUploadSuccess }) {
   const [file, setFile] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [success, setSuccess] = useState("");
@@ -18,20 +17,21 @@ function StatementUpload() {
       const token = localStorage.getItem('supabase_token');
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const res = await axios.post("http://localhost:8000/parse-statement", formData, { headers });
-      // Supabase batch insert returns data inside supabase_response.data
       const inserted = res.data?.supabase_response?.data ?? [];
       setTransactions(inserted);
       setSuccess(res.data?.message || `Inserted ${inserted.length} transactions.`);
       setError("");
+      
+      // Call the callback to refresh insights
+      if (onUploadSuccess) {
+        onUploadSuccess();
+      }
     } catch (err) {
-      // Prefer detailed server error if available
       const serverData = err.response?.data;
       const detail = serverData?.detail || serverData?.error || serverData?.message || serverData || err.message;
       setError(typeof detail === 'string' ? detail : JSON.stringify(detail));
       const API_ROOT = process.env.REACT_APP_API_URL || "http://localhost:8001";
       const res = await axios.post(`${API_ROOT}/parse-statement`, formData);
-      // backend returns { message, supabase_response }
-      // Do not display all transactions in the UI — show a short success message instead.
       setTransactions([]);
       setSuccess("Upload successful.");
       setError(err.response?.data?.detail || err.response?.data?.error || "Upload failed.");    
